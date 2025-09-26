@@ -1,0 +1,357 @@
+{
+  "name": "scrapes of website data",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -64,
+        32
+      ],
+      "id": "625a14ff-6f25-4449-93c1-24b1c197c9fb",
+      "name": "When chat message received",
+      "webhookId": "daddf490-77c5-4843-9152-371ebbf8c933"
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"queries\": [\n    {\n      \"url\": \"https://www.zapier.com\",\n      \"prompt\": \"list all pricing tiers and their included features\"\n    },\n    {\n      \"url\": \"https://www.make.com\",\n      \"prompt\": \"describe the automation capabilities and integration options\"\n    }\n  ]\n}\n"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        384,
+        352
+      ],
+      "id": "684cccd8-6802-4903-85f5-2cc6d3fa0578",
+      "name": "Structured Output Parser"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v1/scrape",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"url\": \"{{ $json.url }}\",\n  \"formats\": [\n    \"json\"\n  ],\n  \"jsonOptions\": {\n    \"prompt\": \"{{ $json.prompt }}\"\n  }\n} ",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1
+            }
+          }
+        }
+      },
+      "id": "501d550c-649f-4981-953f-70e4c60eb688",
+      "name": "Scrape URL using Plain Text",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1104,
+        32
+      ],
+      "retryOnFail": true,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=<data>\n{{ JSON.stringify($('Aggregate').item.json.data, null, 2) }}\n</data>\n\n<original question>\n{{ JSON.stringify($('Extract user queries').item.json.output.queries, null, 2) }}\n{{ $('When chat message received').item.json.chatInput }}\n</original question>",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=Format the incoming data nicely, using Markdown. ONLY extract what was asked in the original questions. i.e. Answer the question with the information you have. Do not make any information up."
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        1536,
+        32
+      ],
+      "id": "8d823125-c1e8-44a0-8c4a-a71d97c42fec",
+      "name": "Format"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserAutofixing",
+      "typeVersion": 1,
+      "position": [
+        304,
+        208
+      ],
+      "id": "0c5718da-135f-4256-b0fa-899aea8339cc",
+      "name": "Auto-fixing Output Parser"
+    },
+    {
+      "parameters": {
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=Given a user message as input, analyze it for URLs and questions. For each unique URL/question pair, generate a structured output.\n\n<rules>\n- Extract explicit URLs or infer them from company/service names\n- Transform questions into clear, attribute-focused queries\n- Remove specific company names from prompts\n- Handle multiple URLs and questions by creating separate outputs\n- Always use HTTPS URLs\n</rules>\n\n<output_format>\n{\n  \"queries\": [\n    {\n      \"url\": \"https://www.example.com\",\n      \"prompt\": \"transformed question\"\n    }\n  ]\n}\n</output_format>\n\n<examples>\nInput: \"Compare Zapier's pricing with Make.com's automation features\"\nOutput: {\n  \"queries\": [\n    {\n      \"url\": \"https://www.zapier.com\",\n      \"prompt\": \"list all pricing tiers and their features\"\n    },\n    {\n      \"url\": \"https://www.make.com\", \n      \"prompt\": \"describe all automation capabilities and features\"\n    }\n  ]\n}\n\nInput: \"What integrations does Zapier have?\"\nOutput: {\n  \"queries\": [\n    {\n      \"url\": \"https://www.zapier.com\",\n      \"prompt\": \"list all available software integrations and supported platforms\"\n    }\n  ]\n}\n</examples>\n\n<error_handling>\nIf URL is missing:\n\n1. Ask user to provide URL if unknown\n2. Infer URL from company/service name if known\n3. Return error message if URL cannot be determined\n</error_handling>"
+            }
+          ]
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        160,
+        32
+      ],
+      "id": "2387cd16-7330-4f83-b4e8-cc72cc036a3c",
+      "name": "Extract user queries",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "output.queries",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        592,
+        32
+      ],
+      "id": "8b5bac0a-ee72-40ee-9201-6a750770ff14",
+      "name": "Split Out Queries"
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "data"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        32
+      ],
+      "id": "ed811cfc-f4fe-4c96-a94f-9744263f77b0",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "model": "=anthropic/claude-3.5-sonnet",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.1,
+      "position": [
+        1616,
+        208
+      ],
+      "id": "9d951406-fdaf-4204-90b2-84e37cc08b58",
+      "name": "Openrouter",
+      "credentials": {
+        "openAiApi": {
+          "id": "vwOhvTYYiXxP5lkx",
+          "name": "OpenAi account 5"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "=openai/gpt-4o-mini",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.1,
+      "position": [
+        160,
+        208
+      ],
+      "id": "3a27327d-c4f3-4047-b507-a6f2717b909b",
+      "name": "Openrouter - gpt",
+      "credentials": {
+        "openAiApi": {
+          "id": "vwOhvTYYiXxP5lkx",
+          "name": "OpenAi account 5"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        800,
+        32
+      ],
+      "id": "df55e56c-14e0-428c-812e-3ad8e01b3cf8",
+      "name": "Loop Over Items"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Extract user queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Auto-fixing Output Parser",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape URL using Plain Text": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Auto-fixing Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Extract user queries",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract user queries": {
+      "main": [
+        [
+          {
+            "node": "Split Out Queries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out Queries": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "Format",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Openrouter": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Format",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Openrouter - gpt": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Extract user queries",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Auto-fixing Output Parser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Scrape URL using Plain Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "d80643e3-0b23-467e-803f-b9f682fd53c7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "0bc77d1e83eb271c93d761935713d306621ca9e7f4a7a40c1c9c6764db49cd61"
+  },
+  "id": "mZyN17v8LTShY49R",
+  "tags": [
+    {
+      "createdAt": "2025-08-12T08:24:41.837Z",
+      "updatedAt": "2025-08-12T08:24:41.837Z",
+      "id": "4Z1Ft2ZZNLfGFthO",
+      "name": "Web Scraping"
+    },
+    {
+      "createdAt": "2025-08-12T08:24:41.840Z",
+      "updatedAt": "2025-08-12T08:24:41.840Z",
+      "id": "f8uzvsx3oTYLwGhh",
+      "name": "Document Extraction"
+    },
+    {
+      "createdAt": "2025-08-12T08:24:41.834Z",
+      "updatedAt": "2025-08-12T08:24:41.834Z",
+      "id": "jWrDxMNvzo34Sv8G",
+      "name": "AI agent"
+    }
+  ]
+}
